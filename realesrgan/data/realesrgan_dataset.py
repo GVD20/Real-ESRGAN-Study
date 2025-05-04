@@ -15,21 +15,21 @@ from torch.utils import data as data
 
 @DATASET_REGISTRY.register()
 class RealESRGANDataset(data.Dataset):
-    """Dataset used for Real-ESRGAN model:
-    Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic Data.
+    """用于 Real-ESRGAN 模型的数据集:
+    Real-ESRGAN: 使用纯合成数据训练真实世界的盲超分辨率。
 
-    It loads gt (Ground-Truth) images, and augments them.
-    It also generates blur kernels and sinc kernels for generating low-quality images.
-    Note that the low-quality images are processed in tensors on GPUS for faster processing.
+    它加载 gt（Ground-Truth，真实值）图像，并对其进行增强。
+    它还生成模糊核和 sinc 核，用于生成低质量图像。
+    注意，低质量图像是在 GPU 上以张量形式处理的，以加快处理速度。
 
-    Args:
-        opt (dict): Config for train datasets. It contains the following keys:
-            dataroot_gt (str): Data root path for gt.
-            meta_info (str): Path for meta information file.
-            io_backend (dict): IO backend type and other kwarg.
-            use_hflip (bool): Use horizontal flips.
-            use_rot (bool): Use rotation (use vertical flip and transposing h and w for implementation).
-            Please see more options in the codes.
+    参数:
+        opt (dict): 训练数据集的配置。包含以下键:
+            dataroot_gt (str): gt 数据的根路径。
+            meta_info (str): 元信息文件的路径。
+            io_backend (dict): IO 后端类型及其他参数。
+            use_hflip (bool): 是否使用水平翻转。
+            use_rot (bool): 是否使用旋转（通过垂直翻转和转置 h 和 w 实现）。
+            请在代码中查看更多选项。
     """
 
     def __init__(self, opt):

@@ -12,6 +12,7 @@ from torch.nn import functional as F
 
 
 @MODEL_REGISTRY.register()
+# 这个类是 Real-ESRGAN 模型的实现，继承自 SRGANModel 类。
 class RealESRGANModel(SRGANModel):
     """RealESRGAN 模型用于 Real-ESRGAN: 使用纯合成数据训练真实世界的盲超分辨率。
 
@@ -80,6 +81,7 @@ class RealESRGANModel(SRGANModel):
     def feed_data(self, data): # 喂数据
         """从数据加载器接受数据，然后添加两级退化以获得低质量 (LQ) 图像。
         """
+        # 如果是训练模式，并且高阶退化选项为真，则进行高阶退化
         if self.is_train and self.opt.get('high_order_degradation', True):
             # training data synthesis 训练数据合成
 
@@ -117,12 +119,14 @@ class RealESRGANModel(SRGANModel):
             mode = random.choice(['area', 'bilinear', 'bicubic']) # 随机选择插值方式
             # area: 区域插值 bilinear: 双线性插值 bicubic: 三次插值
             out = F.interpolate(out, scale_factor=scale, mode=mode)
+            out = out / (self.kernel1.size(0) * self.kernel1.size(1)) # 除以模糊核的大小
             # 添加噪声 add noise
             gray_noise_prob = self.opt['gray_noise_prob'] # 随机选择添加噪声的概率
             # 添加高斯噪声或泊松噪声
             if np.random.uniform() < self.opt['gaussian_noise_prob']:
                 out = random_add_gaussian_noise_pt(
                     out, sigma_range=self.opt['noise_range'], clip=True, rounds=False, gray_prob=gray_noise_prob)
+                print("Used Gaussian noise")
             else:
                 out = random_add_poisson_noise_pt( # 添加泊松噪声
                     out,
@@ -130,11 +134,13 @@ class RealESRGANModel(SRGANModel):
                     gray_prob=gray_noise_prob, # 添加灰度噪声的概率
                     clip=True,
                     rounds=False)
+                print("Used Poisson noise")
             # JEPG压缩 JPEG compression
             jpeg_p = out.new_zeros(out.size(0)).uniform_(*self.opt['jpeg_range']) # 随机选择JPEG压缩的质量
             # 这里的jpeg_p是一个张量，表示每个图像的JPEG压缩质量
             out = torch.clamp(out, 0, 1)  # clamp to [0, 1], otherwise JPEGer will result in unpleasant artifacts 钳制到 [0, 1]，否则 JPEGer 会搞出不好的伪影
             out = self.jpeger(out, quality=jpeg_p)
+
 
             # ----------------------- 第二个退化流程 ----------------------- #
             # 模糊 blur
@@ -144,19 +150,25 @@ class RealESRGANModel(SRGANModel):
             updown_type = random.choices(['up', 'down', 'keep'], self.opt['resize_prob2'])[0]
             if updown_type == 'up':
                 scale = np.random.uniform(1, self.opt['resize_range2'][1])
+                print("Used upsampling")
             elif updown_type == 'down':
                 scale = np.random.uniform(self.opt['resize_range2'][0], 1)
+                print("Used downsampling")
             else:
                 scale = 1
+                print("Used keep")
             mode = random.choice(['area', 'bilinear', 'bicubic'])
             out = F.interpolate(
                 out, size=(int(ori_h / self.opt['scale'] * scale), int(ori_w / self.opt['scale'] * scale)), mode=mode)
+            out = out / (self.kernel2.size(0) * self.kernel2.size(1))
             # 添加噪声 add noise
             gray_noise_prob = self.opt['gray_noise_prob2']
             if np.random.uniform() < self.opt['gaussian_noise_prob2']:
                 out = random_add_gaussian_noise_pt(
                     out, sigma_range=self.opt['noise_range2'], clip=True, rounds=False, gray_prob=gray_noise_prob)
+                print("Used Gaussian noise")
             else:
+                print("Used Poisson noise")
                 out = random_add_poisson_noise_pt(
                     out,
                     scale_range=self.opt['poisson_scale_range2'],
@@ -171,23 +183,26 @@ class RealESRGANModel(SRGANModel):
                     # 根据经验，我们发现其他组合（sinc + JPEG + 调整尺寸）会引入扭曲的线条。
             if np.random.uniform() < 0.5:
                 # resize back + the final sinc filter
+                print("Used sinc filter first")
                 mode = random.choice(['area', 'bilinear', 'bicubic'])
                 out = F.interpolate(out, size=(ori_h // self.opt['scale'], ori_w // self.opt['scale']), mode=mode)
                 out = filter2D(out, self.sinc_kernel)
                 # JPEG compression
                 jpeg_p = out.new_zeros(out.size(0)).uniform_(*self.opt['jpeg_range2'])
+                out = out / (self.sinc_kernel.size(0) * self.sinc_kernel.size(1))
                 out = torch.clamp(out, 0, 1)
                 out = self.jpeger(out, quality=jpeg_p)
             else:
+                print("Used sinc filter second")
                 # JPEG compression
                 jpeg_p = out.new_zeros(out.size(0)).uniform_(*self.opt['jpeg_range2'])
+                out = out / (self.sinc_kernel.size(0) * self.sinc_kernel.size(1))
                 out = torch.clamp(out, 0, 1)
                 out = self.jpeger(out, quality=jpeg_p)
                 # resize back + the final sinc filter
                 mode = random.choice(['area', 'bilinear', 'bicubic'])
                 out = F.interpolate(out, size=(ori_h // self.opt['scale'], ori_w // self.opt['scale']), mode=mode)
                 out = filter2D(out, self.sinc_kernel)
-
             # clamp and round 钳制并取整
             self.lq = torch.clamp((out * 255.0).round(), 0, 255) / 255.
 
@@ -197,11 +212,14 @@ class RealESRGANModel(SRGANModel):
                                                                  self.opt['scale'])
 
             # training pair pool 训练对池
+            # 这里的训练对池是一个用于存储训练对的队列。我们将当前的低质量图像和高质量图像添加到队列中。
+            # 如果队列满了，我们就从队列中取出一个低质量图像和高质量图像。
             self._dequeue_and_enqueue()
             # sharpen self.gt again, as we have changed the self.gt with self._dequeue_and_enqueue
             # 再次锐化 self.gt，因为我们已经用 self._dequeue_and_enqueue 更改了 self.gt
             self.gt_usm = self.usm_sharpener(self.gt)
             self.lq = self.lq.contiguous()  # for the warning: grad and param do not obey the gradient layout contract 警告：grad 和 param 不遵守梯度布局约定
+        # 不是训练模式，或者高阶退化选项为假，则直接使用数据加载器提供的数据
         else:
             # for paired training or validation 成对训练或验证
             self.lq = data['lq'].to(self.device)
@@ -209,12 +227,14 @@ class RealESRGANModel(SRGANModel):
                 self.gt = data['gt'].to(self.device)
                 self.gt_usm = self.usm_sharpener(self.gt)
 
+    # 这个函数用于验证模型的性能。它会在验证集上运行模型，并计算损失。
     def nondist_validation(self, dataloader, current_iter, tb_logger, save_img):
         # do not use the synthetic process during validation 不要在验证期间使用合成过程
         self.is_train = False
         super(RealESRGANModel, self).nondist_validation(dataloader, current_iter, tb_logger, save_img)
         self.is_train = True
 
+    # 这个函数用于优化模型的参数。它会计算损失，并更新模型的参数。
     def optimize_parameters(self, current_iter):
         # usm sharpening usm 锐化
         l1_gt = self.gt_usm

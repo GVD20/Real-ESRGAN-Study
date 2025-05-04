@@ -9,33 +9,32 @@ from torchvision.transforms.functional import normalize
 
 @DATASET_REGISTRY.register()
 class RealESRGANPairedDataset(data.Dataset):
-    """Paired image dataset for image restoration.
+    """用于图像修复的成对图像数据集。
 
-    Read LQ (Low Quality, e.g. LR (Low Resolution), blurry, noisy, etc) and GT image pairs.
+    读取 LQ（低质量，例如 LR（低分辨率）、模糊、噪声等）和 GT 图像对。
 
-    There are three modes:
-    1. 'lmdb': Use lmdb files.
-        If opt['io_backend'] == lmdb.
-    2. 'meta_info': Use meta information file to generate paths.
-        If opt['io_backend'] != lmdb and opt['meta_info'] is not None.
-    3. 'folder': Scan folders to generate paths.
-        The rest.
+    有三种模式：
+    1. 'lmdb'：使用 lmdb 文件。
+        如果 opt['io_backend'] == lmdb。
+    2. 'meta_info'：使用元信息文件生成路径。
+        如果 opt['io_backend'] != lmdb 且 opt['meta_info'] 不为 None。
+    3. 'folder'：扫描文件夹生成路径。
+        其余情况。
 
-    Args:
-        opt (dict): Config for train datasets. It contains the following keys:
-            dataroot_gt (str): Data root path for gt.
-            dataroot_lq (str): Data root path for lq.
-            meta_info (str): Path for meta information file.
-            io_backend (dict): IO backend type and other kwarg.
-            filename_tmpl (str): Template for each filename. Note that the template excludes the file extension.
-                Default: '{}'.
-            gt_size (int): Cropped patched size for gt patches.
-            use_hflip (bool): Use horizontal flips.
-            use_rot (bool): Use rotation (use vertical flip and transposing h
-                and w for implementation).
+    参数：
+        opt (dict): 训练数据集的配置。包含以下键：
+            dataroot_gt (str): gt 的数据根路径。
+            dataroot_lq (str): lq 的数据根路径。
+            meta_info (str): 元信息文件的路径。
+            io_backend (dict): IO 后端类型及其他参数。
+            filename_tmpl (str): 每个文件名的模板。注意，模板不包括文件扩展名。
+                默认值：'{}'。
+            gt_size (int): gt 图像块的裁剪大小。
+            use_hflip (bool): 是否使用水平翻转。
+            use_rot (bool): 是否使用旋转（通过垂直翻转和交换 h 和 w 实现）。
 
-            scale (bool): Scale, which will be added automatically.
-            phase (str): 'train' or 'val'.
+            scale (bool): 缩放比例，将自动添加。
+            phase (str): 'train' 或 'val'。
     """
 
     def __init__(self, opt):

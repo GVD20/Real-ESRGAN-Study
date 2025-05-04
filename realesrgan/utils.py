@@ -25,6 +25,17 @@ class RealESRGANer():
         pre_pad (int): Pad the input images to avoid border artifacts. Default: 10.
         half (float): Whether to use half precision during inference. Default: False.
     """
+    """一个用于使用 RealESRGAN 放大图像的辅助类。
+
+    参数：
+        scale (int): 网络中使用的放大比例因子。通常为 2 或 4。
+        model_path (str): 预训练模型的路径。可以是 URL（将首先自动下载）。
+        model (nn.Module): 定义的网络。默认值：None。
+        tile (int): 由于过大的图像会导致 GPU 内存不足问题，因此此 tile 选项会先将输入图像裁剪为小块，然后处理每个小块。最后，它们将合并为一张图像。0 表示不使用 tile。默认值：0。
+        tile_pad (int): 每个 tile 的填充大小，用于去除边界伪影。默认值：10。
+        pre_pad (int): 对输入图像进行填充以避免边界伪影。默认值：10。
+        half (float): 推理过程中是否使用半精度。默认值：False。
+    """
 
     def __init__(self,
                  scale,
@@ -119,6 +130,11 @@ class RealESRGANer():
         Finally, all the processed tiles are merged into one images.
 
         Modified from: https://github.com/ata4/esrgan-launcher
+        """
+        """它将首先将输入图像裁剪为小块，然后处理每个小块。
+        最后，所有处理过的小块将合并为一张图像。
+
+        修改自：https://github.com/ata4/esrgan-launcher
         """
         batch, channel, height, width = self.img.shape
         output_height = height * self.scale
